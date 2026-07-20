@@ -215,6 +215,14 @@ section#chat-area {
 .admin-trash-widget .dropdown-panel { min-width: 260px; }
 .admin-trash-widget .link-btn.hidden { display: none; }
 
+.trash-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.trash-panel-header h3 { margin: 0; }
+
 .trash-type {
   display: inline-block;
   font-size: 10px;

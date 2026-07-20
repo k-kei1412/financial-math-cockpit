@@ -289,6 +289,19 @@ if (isAdmin) {
     if (error) return alert("復元に失敗しました: " + error.message);
     loadTrash();
   });
+
+  document.getElementById("admin-trash-restore-all-btn").addEventListener("click", async () => {
+    const ok = await showConfirm("ゴミ箱の中身を全て復元しますか？");
+    if (!ok) return;
+    const results = await Promise.all(
+      TRASH_TABLES.map(({ table }) =>
+        db.from(table).update({ deleted_at: null }).not("deleted_at", "is", null)
+      )
+    );
+    const failed = results.find((r) => r.error);
+    if (failed) alert("一部の復元に失敗しました: " + failed.error.message);
+    loadTrash();
+  });
 }
 
 function renderChatMessages(messages) {
