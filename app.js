@@ -328,6 +328,17 @@ async function loadTrash() {
     if (failed) alert("一部の復元に失敗しました: " + failed.error.message);
     loadTrash();
   });
+
+  document.getElementById("admin-trash-empty-btn").addEventListener("click", async () => {
+    const ok = await showConfirm("ゴミ箱を空にします。完全に削除され、復元できなくなります。よろしいですか？");
+    if (!ok) return;
+    const results = await Promise.all(
+      TRASH_TABLES.map(({ table }) => db.from(table).delete().not("deleted_at", "is", null))
+    );
+    const failed = results.find((r) => r.error);
+    if (failed) alert("一部の完全削除に失敗しました: " + failed.error.message);
+    loadTrash();
+  });
 }
 
 function renderChatMessages(messages) {
@@ -409,9 +420,15 @@ function renderTasks(tasks) {
       const deleteCell = isAdmin
         ? `<td><button class="icon-btn task-delete-btn" data-id="${task.id}" title="削除（管理者）">✕</button></td>`
         : "<td></td>";
+      const titleCell = isAdmin
+        ? `<input type="text" class="task-edit-input" data-id="${task.id}" data-field="title" value="${escapeAttr(task.title)}" />`
+        : escapeHtml(task.title);
+      const assigneeCell = isAdmin
+        ? `<input type="text" class="task-edit-input" data-id="${task.id}" data-field="assignee" value="${escapeAttr(task.assignee || "")}" />`
+        : escapeHtml(displayName(task.assignee) || "未定");
       tr.innerHTML = `
-        <td>${escapeHtml(task.title)}</td>
-        <td>${escapeHtml(displayName(task.assignee) || "未定")}</td>
+        <td>${titleCell}</td>
+        <td>${assigneeCell}</td>
         <td>
           <select class="status-select" data-id="${task.id}">
             <option value="未着手" ${task.status === "未着手" ? "selected" : ""}>未着手</option>
@@ -442,11 +459,36 @@ taskForm.addEventListener("submit", async (e) => {
 });
 
 taskTableBody.addEventListener("change", async (e) => {
-  if (!e.target.classList.contains("status-select")) return;
-  const id = e.target.dataset.id;
-  const status = e.target.value;
-  const { error } = await db.from("tasks").update({ status }).eq("id", id);
-  if (error) alert("更新に失敗しました: " + error.message);
+  if (e.target.classList.contains("status-select")) {
+    const id = e.target.dataset.id;
+    const status = e.target.value;
+    const { error } = await db.from("tasks").update({ status }).eq("id", id);
+    if (error) alert("更新に失敗しました: " + error.message);
+    return;
+  }
+
+  if (e.target.classList.contains("task-edit-input")) {
+    const id = e.target.dataset.id;
+    const field = e.target.dataset.field;
+    const value = e.target.value.trim();
+    if (field === "title" && !value) {
+      alert("タスク名は空にできません。");
+      loadTasks();
+      return;
+    }
+    const { error } = await db
+      .from("tasks")
+      .update({ [field]: field === "assignee" ? value || null : value })
+      .eq("id", id);
+    if (error) alert("更新に失敗しました: " + error.message);
+  }
+});
+
+// 管理者用のタスク名・担当者編集欄はEnterキーでも確定できるようにする
+taskTableBody.addEventListener("keydown", (e) => {
+  if (e.target.classList.contains("task-edit-input") && e.key === "Enter") {
+    e.target.blur();
+  }
 });
 
 taskTableBody.addEventListener("click", async (e) => {

@@ -222,6 +222,9 @@ section#chat-area {
   margin-bottom: 8px;
 }
 .trash-panel-header h3 { margin: 0; }
+.trash-panel-actions { display: flex; gap: 10px; flex-shrink: 0; }
+button.danger-link { color: var(--danger); }
+button.danger-link:hover { color: #ff8a9a; }
 
 .trash-type {
   display: inline-block;
@@ -298,6 +301,12 @@ table#task-table th, table#task-table td {
   text-align: left;
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
+}
+
+input.task-edit-input {
+  width: 100%;
+  font-size: 13px;
+  padding: 4px 6px;
 }
 
 table#task-table th {
