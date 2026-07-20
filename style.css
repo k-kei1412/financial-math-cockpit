@@ -211,6 +211,35 @@ section#chat-area {
 }
 .admin-badge.hidden { display: none; }
 .admin-badge .link-btn { color: #ffbdbd; margin-left: 6px; }
+.admin-trash-widget { position: relative; display: inline-block; }
+.admin-trash-widget .dropdown-panel { min-width: 260px; }
+.admin-trash-widget .link-btn.hidden { display: none; }
+
+.trash-type {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--text-dim);
+  background: #101728;
+  padding: 1px 6px;
+  border-radius: 6px;
+  margin-right: 6px;
+}
+.trash-preview { font-size: 12px; }
+.trash-time {
+  display: block;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin: 2px 0 4px;
+}
+
+.chat-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.chat-header-row h2 { margin: 0; }
+#chat-clear-all-btn.hidden { display: none; }
 
 #chat-form {
   display: flex;
@@ -392,6 +421,17 @@ main#main-split {
   gap: 6px;
   margin-top: 6px;
 }
+.formula-actions button.secondary-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.formula-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+}
 
 button.copy-btn {
   background: var(--accent-dim);
@@ -530,3 +570,52 @@ details#log-history summary { cursor: pointer; color: var(--text-dim); }
   justify-content: space-between;
 }
 .log-entry .log-delete-btn { font-size: 12px; }
+
+/* ============================================================
+   スマホ・タブレット対応（狭い画面では3カラムを縦積みにする）
+   ============================================================ */
+@media (max-width: 860px) {
+  header.app-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  header.app-header .status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 4px;
+  }
+
+  main#main-split {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  #formula-panel {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 340px;
+  }
+
+  #editor-panel { min-width: 0; }
+
+  #editor-split {
+    flex-direction: column;
+    min-height: 0;
+  }
+  .editor-half {
+    width: 100%;
+    min-height: 200px;
+  }
+  .editor-half:first-child {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  section#task-area { overflow-x: auto; }
+  table#task-table { min-width: 480px; }
+
+  .dropdown-panel { right: auto; left: 0; }
+}

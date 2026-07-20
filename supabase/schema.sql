@@ -16,7 +16,8 @@ create table if not exists public.tasks (
   status      text not null default '未着手'
               check (status in ('未着手', '進行中', '完了')),
   created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+  updated_at  timestamptz not null default now(),
+  deleted_at  timestamptz  -- 論理削除（誤削除からの復元用。管理者のゴミ箱に表示）
 );
 
 -- ------------------------------------------------------------
@@ -27,7 +28,8 @@ create table if not exists public.formulas (
   name        text not null,
   latex       text not null,        -- 区切り記号 $ / $$ を含まない純粋なLaTeXコード
   category    text default '未分類',
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  deleted_at  timestamptz
 );
 
 -- ------------------------------------------------------------
@@ -37,7 +39,8 @@ create table if not exists public.research_logs (
   id          uuid primary key default gen_random_uuid(),
   author      text default '匿名',
   content     text not null,
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  deleted_at  timestamptz
 );
 
 -- ------------------------------------------------------------
@@ -47,7 +50,8 @@ create table if not exists public.chat_messages (
   id          uuid primary key default gen_random_uuid(),
   author      text default '匿名',
   content     text not null,
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  deleted_at  timestamptz
 );
 
 -- ------------------------------------------------------------

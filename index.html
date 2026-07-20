@@ -36,6 +36,13 @@
     </span>
     <span id="admin-badge" class="admin-badge hidden">
       管理者モード
+      <span class="admin-trash-widget">
+        <button id="admin-trash-btn" class="link-btn hidden" title="ゴミ箱を表示">ゴミ箱</button>
+        <div id="admin-trash-panel" class="dropdown-panel hidden">
+          <h3>ゴミ箱（削除済み・復元可）</h3>
+          <ul id="admin-trash-list"></ul>
+        </div>
+      </span>
       <button id="admin-exit-btn" class="link-btn" title="管理者モードを終了">終了</button>
     </span>
   </div>
@@ -43,7 +50,10 @@
 
 <!-- ① 画面上部：チームチャットエリア -->
 <section id="chat-area">
-  <h2>チームチャット</h2>
+  <div class="chat-header-row">
+    <h2>チームチャット</h2>
+    <button id="chat-clear-all-btn" class="link-btn hidden" title="チャットを全消去（管理者）">全消去</button>
+  </div>
   <div id="chat-messages"></div>
   <form id="chat-form">
     <input type="text" id="chat-input" placeholder="メッセージを入力..." autocomplete="off" required />

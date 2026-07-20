@@ -212,6 +212,85 @@ if (isAdmin) {
   });
 }
 
+// ------------------------------------------------------------
+// ゴミ箱（管理者のみ）: 4テーブルの論理削除済みデータをまとめて表示・復元
+// ------------------------------------------------------------
+const TRASH_TABLES = [
+  { table: "tasks", label: "タスク", text: (r) => r.title },
+  { table: "formulas", label: "公式", text: (r) => r.name },
+  { table: "research_logs", label: "研究ログ", text: (r) => r.content },
+  { table: "chat_messages", label: "チャット", text: (r) => r.content },
+];
+
+async function loadTrash() {
+  const trashList = document.getElementById("admin-trash-list");
+  const results = await Promise.all(
+    TRASH_TABLES.map(async ({ table }) => {
+      const { data, error } = await db
+        .from(table)
+        .select("*")
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false })
+        .limit(20);
+      if (error) {
+        console.error(error);
+        return [];
+      }
+      return data.map((row) => ({ table, row }));
+    })
+  );
+  const items = results
+    .flat()
+    .sort((a, b) => new Date(b.row.deleted_at) - new Date(a.row.deleted_at))
+    .slice(0, 30);
+
+  if (items.length === 0) {
+    trashList.innerHTML = "<li>ゴミ箱は空です。</li>";
+    return;
+  }
+  trashList.innerHTML = items
+    .map(({ table, row }) => {
+      const meta = TRASH_TABLES.find((t) => t.table === table);
+      const preview = (meta.text(row) || "").slice(0, 40);
+      const when = new Date(row.deleted_at).toLocaleString("ja-JP");
+      return `
+        <li>
+          <span class="trash-type">${meta.label}</span>
+          <span class="trash-preview">${escapeHtml(preview)}</span>
+          <span class="trash-time">${when}</span>
+          <button class="link-btn trash-restore-btn" data-table="${table}" data-id="${row.id}">復元</button>
+        </li>
+      `;
+    })
+    .join("");
+}
+
+if (isAdmin) {
+  const trashBtn = document.getElementById("admin-trash-btn");
+  const trashPanel = document.getElementById("admin-trash-panel");
+  trashBtn.classList.remove("hidden");
+  trashBtn.addEventListener("click", () => {
+    const willOpen = trashPanel.classList.contains("hidden");
+    trashPanel.classList.toggle("hidden");
+    if (willOpen) loadTrash();
+  });
+  document.addEventListener("click", (e) => {
+    if (!trashPanel.classList.contains("hidden") && !e.target.closest("#admin-trash-btn") && !e.target.closest("#admin-trash-panel")) {
+      trashPanel.classList.add("hidden");
+    }
+  });
+  document.getElementById("admin-trash-list").addEventListener("click", async (e) => {
+    const btn = e.target.closest(".trash-restore-btn");
+    if (!btn) return;
+    const { error } = await db
+      .from(btn.dataset.table)
+      .update({ deleted_at: null })
+      .eq("id", btn.dataset.id);
+    if (error) return alert("復元に失敗しました: " + error.message);
+    loadTrash();
+  });
+}
+
 function renderChatMessages(messages) {
   chatMessagesEl.innerHTML = "";
   messages
@@ -238,6 +317,7 @@ async function loadChatMessages() {
   const { data, error } = await db
     .from("chat_messages")
     .select("*")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) return console.error(error);
@@ -257,10 +337,25 @@ if (isAdmin) {
   chatMessagesEl.addEventListener("click", async (e) => {
     const btn = e.target.closest(".chat-delete-btn");
     if (!btn) return;
-    const ok = await showConfirm("このチャットメッセージを削除しますか？（管理者操作）");
+    const ok = await showConfirm("このチャットメッセージを削除しますか？（管理者操作・ゴミ箱から復元できます）");
     if (!ok) return;
-    const { error } = await db.from("chat_messages").delete().eq("id", btn.dataset.id);
+    const { error } = await db
+      .from("chat_messages")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", btn.dataset.id);
     if (error) alert("削除に失敗しました: " + error.message);
+  });
+
+  const chatClearAllBtn = document.getElementById("chat-clear-all-btn");
+  chatClearAllBtn.classList.remove("hidden");
+  chatClearAllBtn.addEventListener("click", async () => {
+    const ok = await showConfirm("チームチャットを全て削除しますか？（管理者操作・ゴミ箱から復元できます）");
+    if (!ok) return;
+    const { error } = await db
+      .from("chat_messages")
+      .update({ deleted_at: new Date().toISOString() })
+      .is("deleted_at", null);
+    if (error) alert("全消去に失敗しました: " + error.message);
   });
 }
 
@@ -276,6 +371,9 @@ function renderTasks(tasks) {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .forEach((task) => {
       const tr = document.createElement("tr");
+      const deleteCell = isAdmin
+        ? `<td><button class="icon-btn task-delete-btn" data-id="${task.id}" title="削除（管理者）">✕</button></td>`
+        : "<td></td>";
       tr.innerHTML = `
         <td>${escapeHtml(task.title)}</td>
         <td>${escapeHtml(task.assignee || "未定")}</td>
@@ -286,14 +384,14 @@ function renderTasks(tasks) {
             <option value="完了"   ${task.status === "完了" ? "selected" : ""}>完了</option>
           </select>
         </td>
-        <td><button class="icon-btn" data-id="${task.id}" title="削除">✕</button></td>
+        ${deleteCell}
       `;
       taskTableBody.appendChild(tr);
     });
 }
 
 async function loadTasks() {
-  const { data, error } = await db.from("tasks").select("*");
+  const { data, error } = await db.from("tasks").select("*").is("deleted_at", null);
   if (error) return console.error(error);
   renderTasks(data);
 }
@@ -316,14 +414,19 @@ taskTableBody.addEventListener("change", async (e) => {
   if (error) alert("更新に失敗しました: " + error.message);
 });
 
-taskTableBody.addEventListener("click", async (e) => {
-  if (!e.target.matches("button[data-id]")) return;
-  const ok = await showConfirm("このタスクを削除しますか？");
-  if (!ok) return;
-  const id = e.target.dataset.id;
-  const { error } = await db.from("tasks").delete().eq("id", id);
-  if (error) alert("削除に失敗しました: " + error.message);
-});
+if (isAdmin) {
+  taskTableBody.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".task-delete-btn");
+    if (!btn) return;
+    const ok = await showConfirm("このタスクを削除しますか？（管理者操作・ゴミ箱から復元できます）");
+    if (!ok) return;
+    const { error } = await db
+      .from("tasks")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", btn.dataset.id);
+    if (error) alert("削除に失敗しました: " + error.message);
+  });
+}
 
 // ============================================================
 // 2. 公式検索・登録・コピペエリア
@@ -337,6 +440,7 @@ const copyModeCheckbox = document.getElementById("copy-mode-sheet");
 
 let allFormulas = [];
 const expandedFormulaIds = new Set();
+let editingFormulaId = null;
 
 // $ / $$ で囲まれた部分を剥がし、純粋なLaTeXコードのみを取り出す
 function stripDelimiters(raw) {
@@ -359,6 +463,34 @@ function renderFormulas(list) {
     const isOpen = expandedFormulaIds.has(f.id);
     const card = document.createElement("div");
     card.className = "formula-card" + (isOpen ? " open" : "");
+
+    if (isAdmin && editingFormulaId === f.id) {
+      card.innerHTML = `
+        <button type="button" class="formula-card-toggle" data-id="${f.id}">
+          <span class="chevron">▶</span>
+          <span class="name">${escapeHtml(f.name)}</span>
+          <span class="category">${escapeHtml(f.category || "未分類")}</span>
+        </button>
+        <div class="formula-card-body">
+          <form class="formula-edit-form" data-id="${f.id}">
+            <input type="text" class="formula-edit-name" value="${escapeAttr(f.name)}" required />
+            <textarea class="formula-edit-latex" rows="2" required>${escapeHtml(f.latex)}</textarea>
+            <input type="text" class="formula-edit-category" value="${escapeAttr(f.category || "")}" />
+            <div class="formula-actions">
+              <button type="submit" class="primary-btn">保存</button>
+              <button type="button" class="secondary-btn formula-edit-cancel">キャンセル</button>
+            </div>
+          </form>
+        </div>
+      `;
+      formulaList.appendChild(card);
+      return;
+    }
+
+    const adminButtons = isAdmin
+      ? `<button class="secondary-btn formula-edit-btn" data-id="${f.id}">編集</button>
+         <button class="secondary-btn formula-delete-btn" data-id="${f.id}">削除</button>`
+      : "";
     card.innerHTML = `
       <button type="button" class="formula-card-toggle" data-id="${f.id}">
         <span class="chevron">▶</span>
@@ -369,6 +501,7 @@ function renderFormulas(list) {
         <div class="formula-preview"><span class="katex-target"></span></div>
         <div class="formula-actions">
           <button class="copy-btn" data-latex="${escapeAttr(f.latex)}">コピー</button>
+          ${adminButtons}
         </div>
       </div>
     `;
@@ -383,7 +516,11 @@ function renderFormulas(list) {
 }
 
 async function loadFormulas() {
-  const { data, error } = await db.from("formulas").select("*").order("created_at", { ascending: true });
+  const { data, error } = await db
+    .from("formulas")
+    .select("*")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
   if (error) return console.error(error);
   allFormulas = data;
   applyFormulaFilter();
@@ -456,6 +593,33 @@ formulaList.addEventListener("click", async (e) => {
     return;
   }
 
+  const editBtn = e.target.closest(".formula-edit-btn");
+  if (editBtn) {
+    editingFormulaId = editBtn.dataset.id;
+    expandedFormulaIds.add(editingFormulaId);
+    applyFormulaFilter();
+    return;
+  }
+
+  const cancelBtn = e.target.closest(".formula-edit-cancel");
+  if (cancelBtn) {
+    editingFormulaId = null;
+    applyFormulaFilter();
+    return;
+  }
+
+  const deleteBtn = e.target.closest(".formula-delete-btn");
+  if (deleteBtn) {
+    const ok = await showConfirm("この公式を削除しますか？（管理者操作・ゴミ箱から復元できます）");
+    if (!ok) return;
+    const { error } = await db
+      .from("formulas")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", deleteBtn.dataset.id);
+    if (error) alert("削除に失敗しました: " + error.message);
+    return;
+  }
+
   if (!e.target.classList.contains("copy-btn")) return;
   const btn = e.target;
   const pureLatex = stripDelimiters(btn.dataset.latex);
@@ -472,6 +636,26 @@ formulaList.addEventListener("click", async (e) => {
     alert("クリップボードへのコピーに失敗しました。ブラウザの権限設定をご確認ください。");
   }
 });
+
+if (isAdmin) {
+  formulaList.addEventListener("submit", async (e) => {
+    const form = e.target.closest(".formula-edit-form");
+    if (!form) return;
+    e.preventDefault();
+    const name = form.querySelector(".formula-edit-name").value.trim();
+    const rawLatex = form.querySelector(".formula-edit-latex").value.trim();
+    const category = form.querySelector(".formula-edit-category").value.trim() || "未分類";
+    if (!name || !rawLatex) return;
+    const latex = stripDelimiters(rawLatex);
+    const { error } = await db
+      .from("formulas")
+      .update({ name, latex, category })
+      .eq("id", form.dataset.id);
+    if (error) return alert("公式の更新に失敗しました: " + error.message);
+    editingFormulaId = null;
+    applyFormulaFilter();
+  });
+}
 
 // ============================================================
 // 3. 作業ログ入力 & リアルタイムプレビュー
@@ -539,10 +723,13 @@ function renderLogHistory(logs) {
       const div = document.createElement("div");
       div.className = "log-entry";
       const when = new Date(log.created_at).toLocaleString("ja-JP");
+      const deleteBtn = isAdmin
+        ? `<button class="icon-btn log-delete-btn" data-id="${log.id}" title="このログを削除（管理者）">✕</button>`
+        : "";
       div.innerHTML = `
         <div class="log-meta">
           <span>${escapeHtml(log.author)} ・ ${when}</span>
-          <button class="icon-btn log-delete-btn" data-id="${log.id}" title="このログを削除">✕</button>
+          ${deleteBtn}
         </div>
         <div>${escapeHtml(log.content).replace(/\n/g, "<br>")}</div>
       `;
@@ -558,19 +745,29 @@ function renderLogHistory(logs) {
 }
 
 async function loadLogHistory() {
-  const { data, error } = await db.from("research_logs").select("*").order("created_at", { ascending: false }).limit(30);
+  const { data, error } = await db
+    .from("research_logs")
+    .select("*")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(30);
   if (error) return console.error(error);
   renderLogHistory(data);
 }
 
-logHistoryList.addEventListener("click", async (e) => {
-  if (!e.target.classList.contains("log-delete-btn")) return;
-  const ok = await showConfirm("この研究ログを削除しますか？この操作は取り消せません。");
-  if (!ok) return;
-  const id = e.target.dataset.id;
-  const { error } = await db.from("research_logs").delete().eq("id", id);
-  if (error) alert("削除に失敗しました: " + error.message);
-});
+if (isAdmin) {
+  logHistoryList.addEventListener("click", async (e) => {
+    if (!e.target.classList.contains("log-delete-btn")) return;
+    const ok = await showConfirm("この研究ログを削除しますか？（管理者操作・ゴミ箱から復元できます）");
+    if (!ok) return;
+    const id = e.target.dataset.id;
+    const { error } = await db
+      .from("research_logs")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) alert("削除に失敗しました: " + error.message);
+  });
+}
 
 // ============================================================
 // Realtime購読
