@@ -262,8 +262,8 @@ section#chat-area {
 section#task-area {
   border-top: 1px solid var(--border);
   background: var(--panel);
-  padding: 10px 16px;
-  max-height: 220px;
+  padding: 16px 20px 24px;
+  max-height: 360px;
   overflow-y: auto;
   flex-shrink: 0;
 }
@@ -278,8 +278,8 @@ section#task-area h2, section#chat-area h2, .panel h2 {
 
 #task-form {
   display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 14px;
   flex-wrap: wrap;
 }
 
@@ -296,7 +296,7 @@ table#task-table {
 
 table#task-table th, table#task-table td {
   text-align: left;
-  padding: 6px 8px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
 }
 
