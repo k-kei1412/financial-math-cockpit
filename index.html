@@ -43,22 +43,24 @@
   <!-- ② 画面左側：公式検索・登録・コピペエリア -->
   <section id="formula-panel" class="panel">
     <h2>公式ライブラリ</h2>
+
+    <details id="add-formula">
+      <summary>+ 新しい公式を登録</summary>
+      <form id="formula-form">
+        <input type="text" id="formula-name" placeholder="公式名" required autocomplete="off" />
+        <p id="formula-duplicate-warning" class="duplicate-warning hidden"></p>
+        <textarea id="formula-latex" rows="2" placeholder="LaTeXコード（$や$$は自動的に除去されます）" required></textarea>
+        <input type="text" id="formula-category" placeholder="カテゴリ（例: 確率過程）" />
+        <button type="submit" class="primary-btn">登録</button>
+      </form>
+    </details>
+
     <input type="text" id="formula-search" placeholder="公式名・数式・カテゴリで検索..." />
     <label class="copy-mode-toggle">
       <input type="checkbox" id="copy-mode-sheet" />
       スプレッドシート貼り付けモード（先頭に ' を付与）
     </label>
     <div id="formula-list"></div>
-
-    <details id="add-formula">
-      <summary>+ 新しい公式を登録</summary>
-      <form id="formula-form">
-        <input type="text" id="formula-name" placeholder="公式名" required />
-        <textarea id="formula-latex" rows="2" placeholder="LaTeXコード（$や$$は自動的に除去されます）" required></textarea>
-        <input type="text" id="formula-category" placeholder="カテゴリ（例: 確率過程）" />
-        <button type="submit" class="primary-btn">登録</button>
-      </form>
-    </details>
   </section>
 
   <!-- ③ 画面右側：作業ログ入力 ＆ リアルタイムプレビュー -->

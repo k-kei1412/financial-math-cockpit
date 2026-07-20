@@ -213,9 +213,12 @@ taskTableBody.addEventListener("click", async (e) => {
 const formulaList = document.getElementById("formula-list");
 const formulaSearch = document.getElementById("formula-search");
 const formulaForm = document.getElementById("formula-form");
+const formulaNameInput = document.getElementById("formula-name");
+const formulaDuplicateWarning = document.getElementById("formula-duplicate-warning");
 const copyModeCheckbox = document.getElementById("copy-mode-sheet");
 
 let allFormulas = [];
+const expandedFormulaIds = new Set();
 
 // $ / $$ で囲まれた部分を剥がし、純粋なLaTeXコードのみを取り出す
 function stripDelimiters(raw) {
@@ -235,16 +238,20 @@ function renderFormulas(list) {
     return;
   }
   list.forEach((f) => {
+    const isOpen = expandedFormulaIds.has(f.id);
     const card = document.createElement("div");
-    card.className = "formula-card";
+    card.className = "formula-card" + (isOpen ? " open" : "");
     card.innerHTML = `
-      <div class="formula-card-head">
+      <button type="button" class="formula-card-toggle" data-id="${f.id}">
+        <span class="chevron">▶</span>
         <span class="name">${escapeHtml(f.name)}</span>
         <span class="category">${escapeHtml(f.category || "未分類")}</span>
-      </div>
-      <div class="formula-preview"><span class="katex-target"></span></div>
-      <div class="formula-actions">
-        <button class="copy-btn" data-latex="${escapeAttr(f.latex)}">コピー</button>
+      </button>
+      <div class="formula-card-body" ${isOpen ? "" : "hidden"}>
+        <div class="formula-preview"><span class="katex-target"></span></div>
+        <div class="formula-actions">
+          <button class="copy-btn" data-latex="${escapeAttr(f.latex)}">コピー</button>
+        </div>
       </div>
     `;
     const target = card.querySelector(".katex-target");
@@ -279,9 +286,31 @@ function applyFormulaFilter() {
 
 formulaSearch.addEventListener("input", applyFormulaFilter);
 
+// 登録名が既存の公式名と重複・類似していないかその場でチェックする
+function findDuplicateFormulas(name) {
+  const q = name.trim().toLowerCase();
+  if (!q) return [];
+  return allFormulas.filter((f) => {
+    const existing = f.name.trim().toLowerCase();
+    return existing === q || existing.includes(q) || q.includes(existing);
+  });
+}
+
+formulaNameInput.addEventListener("input", () => {
+  const duplicates = findDuplicateFormulas(formulaNameInput.value);
+  if (duplicates.length === 0) {
+    formulaDuplicateWarning.classList.add("hidden");
+    formulaDuplicateWarning.textContent = "";
+    return;
+  }
+  const names = duplicates.map((f) => f.name).join("」「");
+  formulaDuplicateWarning.textContent = `⚠ 似た名前の公式が既に登録されています:「${names}」`;
+  formulaDuplicateWarning.classList.remove("hidden");
+});
+
 formulaForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const name = document.getElementById("formula-name").value.trim();
+  const name = formulaNameInput.value.trim();
   const rawLatex = document.getElementById("formula-latex").value.trim();
   const category = document.getElementById("formula-category").value.trim() || "未分類";
   if (!name || !rawLatex) return;
@@ -289,9 +318,26 @@ formulaForm.addEventListener("submit", async (e) => {
   const { error } = await db.from("formulas").insert({ name, latex, category });
   if (error) return alert("公式の追加に失敗しました: " + error.message);
   formulaForm.reset();
+  formulaDuplicateWarning.classList.add("hidden");
 });
 
 formulaList.addEventListener("click", async (e) => {
+  const toggleBtn = e.target.closest(".formula-card-toggle");
+  if (toggleBtn) {
+    const id = toggleBtn.dataset.id;
+    const card = toggleBtn.closest(".formula-card");
+    const body = card.querySelector(".formula-card-body");
+    const nowOpen = body.hasAttribute("hidden");
+    body.toggleAttribute("hidden", !nowOpen);
+    card.classList.toggle("open", nowOpen);
+    if (nowOpen) {
+      expandedFormulaIds.add(id);
+    } else {
+      expandedFormulaIds.delete(id);
+    }
+    return;
+  }
+
   if (!e.target.classList.contains("copy-btn")) return;
   const btn = e.target;
   const pureLatex = stripDelimiters(btn.dataset.latex);

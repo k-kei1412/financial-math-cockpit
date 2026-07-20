@@ -278,29 +278,52 @@ main#main-split {
   background: var(--panel-alt);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 8px 10px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  overflow: hidden;
 }
 
-.formula-card-head {
+.formula-card-toggle {
+  width: 100%;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
 }
+.formula-card-toggle:hover { background: rgba(255, 255, 255, 0.03); }
 
-.formula-card-head .name {
+.formula-card .chevron {
+  font-size: 10px;
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.formula-card.open .chevron { transform: rotate(90deg); }
+
+.formula-card-toggle .name {
   font-weight: 600;
   font-size: 13px;
+  flex: 1;
 }
 
-.formula-card-head .category {
+.formula-card-toggle .category {
   font-size: 11px;
   color: var(--text-dim);
   background: #101728;
   padding: 1px 6px;
   border-radius: 8px;
+  flex-shrink: 0;
 }
+
+.formula-card-body {
+  padding: 0 10px 10px;
+}
+.formula-card-body[hidden] { display: none; }
 
 .formula-preview {
   overflow-x: auto;
@@ -326,9 +349,9 @@ button.copy-btn:hover { background: var(--accent); }
 button.copy-btn.copied { background: var(--ok); color: #04241a; }
 
 details#add-formula {
-  margin-top: 10px;
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
 }
 details#add-formula summary {
   cursor: pointer;
@@ -341,6 +364,14 @@ details#add-formula summary {
   gap: 6px;
   margin-top: 8px;
 }
+
+.duplicate-warning {
+  margin: 0;
+  font-size: 11px;
+  color: var(--warn);
+  line-height: 1.4;
+}
+.duplicate-warning.hidden { display: none; }
 
 /* Right side: editor + preview */
 #editor-panel {
