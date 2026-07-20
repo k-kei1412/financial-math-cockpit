@@ -21,6 +21,15 @@
   <h1>📐 金融数学 研究コックピット</h1>
   <div class="status">
     <span id="status-dot"></span><span id="status-label">接続待機中...</span>
+    <div class="online-users-widget">
+      <button id="online-users-btn" class="link-btn" title="接続中のメンバーを表示">
+        接続者 <span id="online-count">0</span>人
+      </button>
+      <div id="online-users-panel" class="dropdown-panel hidden">
+        <h3>接続中のメンバー</h3>
+        <ul id="online-users-list"></ul>
+      </div>
+    </div>
     <span class="username-widget">
       名前: <span id="username-label"></span>
       <button id="username-edit-btn" class="link-btn" title="表示名を変更">変更</button>
@@ -110,6 +119,18 @@
     <div class="modal-actions">
       <button id="confirm-modal-cancel" class="secondary-btn">いいえ</button>
       <button id="confirm-modal-ok" class="primary-btn">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- 入室ゲート：名前を入力するまでアプリを操作できない -->
+<div id="entry-gate-overlay" class="modal-overlay">
+  <div class="modal-box">
+    <h2 style="margin:0 0 8px;font-size:16px;">ようこそ</h2>
+    <p>お名前を入力して入室してください。同じ名前で入室すると、同一人物として扱われます。</p>
+    <input type="text" id="entry-name-input" placeholder="お名前" maxlength="20" autocomplete="off" />
+    <div class="modal-actions">
+      <button id="entry-submit-btn" class="primary-btn">入室する</button>
     </div>
   </div>
 </div>

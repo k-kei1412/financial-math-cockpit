@@ -19,8 +19,8 @@ if (!window.SUPABASE_CONFIG || window.SUPABASE_CONFIG.url.includes("YOUR-PROJECT
 
 const db = createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey);
 
-// ---- ユーザー名（表示用。認証ではなく単なる名札） ----
-let currentUser = localStorage.getItem("cockpit_username") || "匿名";
+// ---- ユーザー名（表示用。認証ではなく単なる名札。入室ゲートで確定する） ----
+let currentUser = null;
 
 // ============================================================
 // 接続ステータス表示 & 名前登録
@@ -44,7 +44,6 @@ function renderUsername() {
   taskAssigneeInput.placeholder = `担当者（未入力なら「${currentUser}」）`;
   setConnected(realtimeConnected);
 }
-renderUsername();
 
 usernameEditBtn.addEventListener("click", () => {
   if (document.getElementById("username-input")) return; // 編集中は多重起動しない
@@ -59,17 +58,112 @@ usernameEditBtn.addEventListener("click", () => {
   input.focus();
   input.select();
 
+  // Enterキーとblur（フォーカス喪失）の両方からcommitが呼ばれ得るため、
+  // 二重実行を防ぐフラグを持たせる。
+  let settled = false;
+
   const commit = () => {
-    currentUser = input.value.trim() || "匿名";
+    if (settled) return;
+    settled = true;
+    const newName = input.value.trim() || "匿名";
+    const nameChanged = newName !== currentUser;
+    currentUser = newName;
     localStorage.setItem("cockpit_username", currentUser);
-    if (input.parentNode) input.replaceWith(usernameLabel);
+    if (input.isConnected) input.replaceWith(usernameLabel);
     renderUsername();
+    if (nameChanged) joinPresence(currentUser); // 名前を変えたら同一人物と分かる名前で再接続
+  };
+  const cancel = () => {
+    if (settled) return;
+    settled = true;
+    if (input.isConnected) input.replaceWith(usernameLabel);
   };
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") commit();
-    if (e.key === "Escape" && input.parentNode) input.replaceWith(usernameLabel);
+    if (e.key === "Escape") cancel();
   });
   input.addEventListener("blur", commit);
+});
+
+// ============================================================
+// 入室ゲート：名前を入力するまでアプリを開始しない
+// ============================================================
+const entryGateOverlay = document.getElementById("entry-gate-overlay");
+const entryNameInput = document.getElementById("entry-name-input");
+const entrySubmitBtn = document.getElementById("entry-submit-btn");
+
+const savedUsername = localStorage.getItem("cockpit_username");
+if (savedUsername) entryNameInput.value = savedUsername;
+entryNameInput.focus();
+
+function enterApp() {
+  currentUser = entryNameInput.value.trim() || "匿名";
+  localStorage.setItem("cockpit_username", currentUser);
+  entryGateOverlay.classList.add("hidden");
+  renderUsername();
+  init();
+}
+
+entrySubmitBtn.addEventListener("click", enterApp);
+entryNameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    enterApp();
+  }
+});
+
+// ============================================================
+// 接続中メンバー一覧（Supabase Realtime Presence）
+// 同じ名前で入室した場合は同一人物として1件にまとめられる
+// ============================================================
+let presenceChannel = null;
+const onlineUsers = new Map();
+
+const onlineUsersBtn = document.getElementById("online-users-btn");
+const onlineUsersPanel = document.getElementById("online-users-panel");
+const onlineUsersList = document.getElementById("online-users-list");
+const onlineCountEl = document.getElementById("online-count");
+
+function renderOnlineUsers() {
+  const names = Array.from(onlineUsers.keys()).sort((a, b) => a.localeCompare(b, "ja"));
+  onlineCountEl.textContent = names.length;
+  onlineUsersList.innerHTML =
+    names.map((n) => `<li>${escapeHtml(n)}${n === currentUser ? "（自分）" : ""}</li>`).join("") ||
+    "<li>誰も接続していません</li>";
+}
+
+async function joinPresence(name) {
+  if (presenceChannel) {
+    // 古いチャンネルの離脱が完了してから新しい名前で再接続しないと、
+    // 同じトピック名のチャンネルが使い回されて名前（key）が切り替わらない。
+    await db.removeChannel(presenceChannel);
+    presenceChannel = null;
+  }
+  const channel = db.channel("cockpit-presence", {
+    config: { presence: { key: name } },
+  });
+  presenceChannel = channel;
+  channel
+    .on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState();
+      onlineUsers.clear();
+      Object.keys(state).forEach((key) => onlineUsers.set(key, state[key].length));
+      renderOnlineUsers();
+    })
+    .subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await channel.track({ online_at: new Date().toISOString() });
+      }
+    });
+}
+
+onlineUsersBtn.addEventListener("click", () => {
+  onlineUsersPanel.classList.toggle("hidden");
+});
+document.addEventListener("click", (e) => {
+  if (!onlineUsersPanel.classList.contains("hidden") && !e.target.closest(".online-users-widget")) {
+    onlineUsersPanel.classList.add("hidden");
+  }
 });
 
 // ============================================================
@@ -495,9 +589,10 @@ function escapeAttr(str) {
 }
 
 // ============================================================
-// 初期化
+// 初期化（入室ゲートで名前が確定してから呼ばれる）
 // ============================================================
-(async function init() {
+async function init() {
   await Promise.all([loadChatMessages(), loadTasks(), loadFormulas(), loadDraft(), loadLogHistory()]);
   subscribeRealtime();
-})();
+  joinPresence(currentUser);
+}

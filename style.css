@@ -59,6 +59,48 @@ header.app-header .status {
   border-left: 1px solid var(--border);
 }
 
+.online-users-widget {
+  position: relative;
+  display: inline-block;
+  margin-left: 14px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
+
+.dropdown-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  padding: 10px 14px;
+  min-width: 180px;
+  z-index: 500;
+}
+.dropdown-panel.hidden { display: none; }
+.dropdown-panel h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.dropdown-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.dropdown-panel li {
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.dropdown-panel li:last-child { border-bottom: none; }
+
 .username-input {
   width: 120px;
   padding: 2px 6px;
