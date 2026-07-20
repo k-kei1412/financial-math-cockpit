@@ -22,6 +22,15 @@ const db = createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonK
 // ---- ユーザー名（表示用。認証ではなく単なる名札。入室ゲートで確定する） ----
 let currentUser = null;
 
+// ---- 管理者モード：名前としてこの値を入力すると管理者になる ----
+// 表示上は常に「管理者」と表示され、名前を変えない限り管理者は終了しない。
+const ADMIN_SECRET = "23042";
+let isAdmin = false;
+
+function displayName(name) {
+  return name === ADMIN_SECRET ? "管理者" : name;
+}
+
 // ============================================================
 // 接続ステータス表示 & 名前登録
 // ============================================================
@@ -32,17 +41,37 @@ function setConnected(ok) {
   const dot = document.getElementById("status-dot");
   const label = document.getElementById("status-label");
   dot.classList.toggle("connected", ok);
-  label.textContent = ok ? `接続中: ${currentUser}` : "接続待機中...";
+  label.textContent = ok ? `接続中: ${displayName(currentUser)}` : "接続待機中...";
 }
 
 const usernameLabel = document.getElementById("username-label");
 const usernameEditBtn = document.getElementById("username-edit-btn");
 const taskAssigneeInput = document.getElementById("task-assignee");
+const adminBadge = document.getElementById("admin-badge");
+const adminTrashBtn = document.getElementById("admin-trash-btn");
 
 function renderUsername() {
-  usernameLabel.textContent = currentUser;
-  taskAssigneeInput.placeholder = `担当者（未入力なら「${currentUser}」）`;
+  usernameLabel.textContent = displayName(currentUser);
+  taskAssigneeInput.placeholder = `担当者（未入力なら「${displayName(currentUser)}」）`;
   setConnected(realtimeConnected);
+}
+
+// 名前が確定・変更されるたびに呼ぶ。管理者かどうかを判定し直し、
+// 管理者しか見えないボタンや表示を持つ箇所を再描画する。
+function refreshAdminStatus() {
+  const wasAdmin = isAdmin;
+  isAdmin = currentUser === ADMIN_SECRET;
+  adminBadge.classList.toggle("hidden", !isAdmin);
+  adminTrashBtn.classList.toggle("hidden", !isAdmin);
+  const chatClearAllBtn = document.getElementById("chat-clear-all-btn");
+  if (chatClearAllBtn) chatClearAllBtn.classList.toggle("hidden", !isAdmin);
+  // 管理者かどうかが切り替わった場合のみ、削除・編集ボタンの表示を反映するため再読込する
+  if (isAdmin !== wasAdmin) {
+    applyFormulaFilter();
+    loadTasks();
+    loadLogHistory();
+    loadChatMessages();
+  }
 }
 
 usernameEditBtn.addEventListener("click", () => {
@@ -71,7 +100,10 @@ usernameEditBtn.addEventListener("click", () => {
     localStorage.setItem("cockpit_username", currentUser);
     if (input.isConnected) input.replaceWith(usernameLabel);
     renderUsername();
-    if (nameChanged) joinPresence(currentUser); // 名前を変えたら同一人物と分かる名前で再接続
+    if (nameChanged) {
+      refreshAdminStatus(); // 名前が変わったら管理者かどうかを判定し直す
+      joinPresence(currentUser); // 名前を変えたら同一人物と分かる名前で再接続
+    }
   };
   const cancel = () => {
     if (settled) return;
@@ -100,6 +132,10 @@ function enterApp() {
   currentUser = entryNameInput.value.trim() || "匿名";
   localStorage.setItem("cockpit_username", currentUser);
   entryGateOverlay.classList.add("hidden");
+  isAdmin = currentUser === ADMIN_SECRET;
+  adminBadge.classList.toggle("hidden", !isAdmin);
+  adminTrashBtn.classList.toggle("hidden", !isAdmin);
+  document.getElementById("chat-clear-all-btn").classList.toggle("hidden", !isAdmin);
   renderUsername();
   init();
 }
@@ -128,7 +164,7 @@ function renderOnlineUsers() {
   const names = Array.from(onlineUsers.keys()).sort((a, b) => a.localeCompare(b, "ja"));
   onlineCountEl.textContent = names.length;
   onlineUsersList.innerHTML =
-    names.map((n) => `<li>${escapeHtml(n)}${n === currentUser ? "（自分）" : ""}</li>`).join("") ||
+    names.map((n) => `<li>${escapeHtml(displayName(n))}${n === currentUser ? "（自分）" : ""}</li>`).join("") ||
     "<li>誰も接続していません</li>";
 }
 
@@ -202,16 +238,6 @@ const chatMessagesEl = document.getElementById("chat-messages");
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 
-// 管理者モード（/admin.html でパスワード認証すると立つフラグ）
-const isAdmin = localStorage.getItem("cockpit_is_admin") === "1";
-if (isAdmin) {
-  document.getElementById("admin-badge").classList.remove("hidden");
-  document.getElementById("admin-exit-btn").addEventListener("click", () => {
-    localStorage.removeItem("cockpit_is_admin");
-    location.reload();
-  });
-}
-
 // ------------------------------------------------------------
 // ゴミ箱（管理者のみ）: 4テーブルの論理削除済みデータをまとめて表示・復元
 // ------------------------------------------------------------
@@ -265,11 +291,11 @@ async function loadTrash() {
     .join("");
 }
 
-if (isAdmin) {
-  const trashBtn = document.getElementById("admin-trash-btn");
+// トリガーとなるボタン自体が管理者以外には表示されないため、
+// リスナー登録そのものは常時行ってよい。
+{
   const trashPanel = document.getElementById("admin-trash-panel");
-  trashBtn.classList.remove("hidden");
-  trashBtn.addEventListener("click", () => {
+  adminTrashBtn.addEventListener("click", () => {
     const willOpen = trashPanel.classList.contains("hidden");
     trashPanel.classList.toggle("hidden");
     if (willOpen) loadTrash();
@@ -318,7 +344,7 @@ function renderChatMessages(messages) {
       const deleteBtn = isAdmin
         ? `<button class="icon-btn chat-delete-btn" data-id="${msg.id}" title="このメッセージを削除（管理者）">✕</button>`
         : "";
-      div.innerHTML = `<span class="chat-author">${escapeHtml(msg.author)}</span>${escapeHtml(
+      div.innerHTML = `<span class="chat-author">${escapeHtml(displayName(msg.author))}</span>${escapeHtml(
         msg.content
       )}<span class="chat-time">${when}</span>${deleteBtn}`;
       chatMessagesEl.appendChild(div);
@@ -346,31 +372,27 @@ chatForm.addEventListener("submit", async (e) => {
   if (error) alert("メッセージの送信に失敗しました: " + error.message);
 });
 
-if (isAdmin) {
-  chatMessagesEl.addEventListener("click", async (e) => {
-    const btn = e.target.closest(".chat-delete-btn");
-    if (!btn) return;
-    const ok = await showConfirm("このチャットメッセージを削除しますか？（管理者操作・ゴミ箱から復元できます）");
-    if (!ok) return;
-    const { error } = await db
-      .from("chat_messages")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", btn.dataset.id);
-    if (error) alert("削除に失敗しました: " + error.message);
-  });
+chatMessagesEl.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".chat-delete-btn");
+  if (!btn) return;
+  const ok = await showConfirm("このチャットメッセージを削除しますか？（管理者操作・ゴミ箱から復元できます）");
+  if (!ok) return;
+  const { error } = await db
+    .from("chat_messages")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", btn.dataset.id);
+  if (error) alert("削除に失敗しました: " + error.message);
+});
 
-  const chatClearAllBtn = document.getElementById("chat-clear-all-btn");
-  chatClearAllBtn.classList.remove("hidden");
-  chatClearAllBtn.addEventListener("click", async () => {
-    const ok = await showConfirm("チームチャットを全て削除しますか？（管理者操作・ゴミ箱から復元できます）");
-    if (!ok) return;
-    const { error } = await db
-      .from("chat_messages")
-      .update({ deleted_at: new Date().toISOString() })
-      .is("deleted_at", null);
-    if (error) alert("全消去に失敗しました: " + error.message);
-  });
-}
+document.getElementById("chat-clear-all-btn").addEventListener("click", async () => {
+  const ok = await showConfirm("チームチャットを全て削除しますか？（管理者操作・ゴミ箱から復元できます）");
+  if (!ok) return;
+  const { error } = await db
+    .from("chat_messages")
+    .update({ deleted_at: new Date().toISOString() })
+    .is("deleted_at", null);
+  if (error) alert("全消去に失敗しました: " + error.message);
+});
 
 // ============================================================
 // 1. タスク管理エリア
@@ -389,7 +411,7 @@ function renderTasks(tasks) {
         : "<td></td>";
       tr.innerHTML = `
         <td>${escapeHtml(task.title)}</td>
-        <td>${escapeHtml(task.assignee || "未定")}</td>
+        <td>${escapeHtml(displayName(task.assignee) || "未定")}</td>
         <td>
           <select class="status-select" data-id="${task.id}">
             <option value="未着手" ${task.status === "未着手" ? "selected" : ""}>未着手</option>
@@ -427,19 +449,17 @@ taskTableBody.addEventListener("change", async (e) => {
   if (error) alert("更新に失敗しました: " + error.message);
 });
 
-if (isAdmin) {
-  taskTableBody.addEventListener("click", async (e) => {
-    const btn = e.target.closest(".task-delete-btn");
-    if (!btn) return;
-    const ok = await showConfirm("このタスクを削除しますか？（管理者操作・ゴミ箱から復元できます）");
-    if (!ok) return;
-    const { error } = await db
-      .from("tasks")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", btn.dataset.id);
-    if (error) alert("削除に失敗しました: " + error.message);
-  });
-}
+taskTableBody.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".task-delete-btn");
+  if (!btn) return;
+  const ok = await showConfirm("このタスクを削除しますか？（管理者操作・ゴミ箱から復元できます）");
+  if (!ok) return;
+  const { error } = await db
+    .from("tasks")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", btn.dataset.id);
+  if (error) alert("削除に失敗しました: " + error.message);
+});
 
 // ============================================================
 // 2. 公式検索・登録・コピペエリア
@@ -650,25 +670,23 @@ formulaList.addEventListener("click", async (e) => {
   }
 });
 
-if (isAdmin) {
-  formulaList.addEventListener("submit", async (e) => {
-    const form = e.target.closest(".formula-edit-form");
-    if (!form) return;
-    e.preventDefault();
-    const name = form.querySelector(".formula-edit-name").value.trim();
-    const rawLatex = form.querySelector(".formula-edit-latex").value.trim();
-    const category = form.querySelector(".formula-edit-category").value.trim() || "未分類";
-    if (!name || !rawLatex) return;
-    const latex = stripDelimiters(rawLatex);
-    const { error } = await db
-      .from("formulas")
-      .update({ name, latex, category })
-      .eq("id", form.dataset.id);
-    if (error) return alert("公式の更新に失敗しました: " + error.message);
-    editingFormulaId = null;
-    applyFormulaFilter();
-  });
-}
+formulaList.addEventListener("submit", async (e) => {
+  const form = e.target.closest(".formula-edit-form");
+  if (!form) return;
+  e.preventDefault();
+  const name = form.querySelector(".formula-edit-name").value.trim();
+  const rawLatex = form.querySelector(".formula-edit-latex").value.trim();
+  const category = form.querySelector(".formula-edit-category").value.trim() || "未分類";
+  if (!name || !rawLatex) return;
+  const latex = stripDelimiters(rawLatex);
+  const { error } = await db
+    .from("formulas")
+    .update({ name, latex, category })
+    .eq("id", form.dataset.id);
+  if (error) return alert("公式の更新に失敗しました: " + error.message);
+  editingFormulaId = null;
+  applyFormulaFilter();
+});
 
 // ============================================================
 // 3. 作業ログ入力 & リアルタイムプレビュー
@@ -714,7 +732,7 @@ async function loadDraft() {
   const { data, error } = await db.from("shared_draft").select("*").eq("id", 1).single();
   if (error) return console.error(error);
   logInput.value = data.content || "";
-  draftMeta.textContent = `最終更新: ${data.updated_by || "-"}`;
+  draftMeta.textContent = `最終更新: ${data.updated_by ? displayName(data.updated_by) : "-"}`;
   renderPreview();
 }
 
@@ -741,7 +759,7 @@ function renderLogHistory(logs) {
         : "";
       div.innerHTML = `
         <div class="log-meta">
-          <span>${escapeHtml(log.author)} ・ ${when}</span>
+          <span>${escapeHtml(displayName(log.author))} ・ ${when}</span>
           ${deleteBtn}
         </div>
         <div>${escapeHtml(log.content).replace(/\n/g, "<br>")}</div>
@@ -768,19 +786,17 @@ async function loadLogHistory() {
   renderLogHistory(data);
 }
 
-if (isAdmin) {
-  logHistoryList.addEventListener("click", async (e) => {
-    if (!e.target.classList.contains("log-delete-btn")) return;
-    const ok = await showConfirm("この研究ログを削除しますか？（管理者操作・ゴミ箱から復元できます）");
-    if (!ok) return;
-    const id = e.target.dataset.id;
-    const { error } = await db
-      .from("research_logs")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", id);
-    if (error) alert("削除に失敗しました: " + error.message);
-  });
-}
+logHistoryList.addEventListener("click", async (e) => {
+  if (!e.target.classList.contains("log-delete-btn")) return;
+  const ok = await showConfirm("この研究ログを削除しますか？（管理者操作・ゴミ箱から復元できます）");
+  if (!ok) return;
+  const id = e.target.dataset.id;
+  const { error } = await db
+    .from("research_logs")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) alert("削除に失敗しました: " + error.message);
+});
 
 // ============================================================
 // Realtime購読
@@ -800,7 +816,7 @@ function subscribeRealtime() {
       // 自分がまさに入力中の場合は、上書きしてカーソル位置を壊さないようにする
       if (document.activeElement === logInput) return;
       logInput.value = payload.new.content || "";
-      draftMeta.textContent = `最終更新: ${payload.new.updated_by || "-"}`;
+      draftMeta.textContent = `最終更新: ${payload.new.updated_by ? displayName(payload.new.updated_by) : "-"}`;
       renderPreview();
     })
     .subscribe((status) => {
