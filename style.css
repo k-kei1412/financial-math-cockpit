@@ -196,6 +196,21 @@ section#chat-area {
   font-size: 11px;
   margin-left: 6px;
 }
+.chat-message .chat-delete-btn {
+  margin-left: 8px;
+  font-size: 11px;
+}
+
+.admin-badge {
+  margin-left: 14px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #4a1a1a;
+  color: #ff9a9a;
+  font-size: 12px;
+}
+.admin-badge.hidden { display: none; }
+.admin-badge .link-btn { color: #ffbdbd; margin-left: 6px; }
 
 #chat-form {
   display: flex;

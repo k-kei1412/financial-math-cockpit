@@ -202,6 +202,16 @@ const chatMessagesEl = document.getElementById("chat-messages");
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 
+// 管理者モード（/admin.html でパスワード認証すると立つフラグ）
+const isAdmin = localStorage.getItem("cockpit_is_admin") === "1";
+if (isAdmin) {
+  document.getElementById("admin-badge").classList.remove("hidden");
+  document.getElementById("admin-exit-btn").addEventListener("click", () => {
+    localStorage.removeItem("cockpit_is_admin");
+    location.reload();
+  });
+}
+
 function renderChatMessages(messages) {
   chatMessagesEl.innerHTML = "";
   messages
@@ -213,9 +223,12 @@ function renderChatMessages(messages) {
         hour: "2-digit",
         minute: "2-digit",
       });
+      const deleteBtn = isAdmin
+        ? `<button class="icon-btn chat-delete-btn" data-id="${msg.id}" title="このメッセージを削除（管理者）">✕</button>`
+        : "";
       div.innerHTML = `<span class="chat-author">${escapeHtml(msg.author)}</span>${escapeHtml(
         msg.content
-      )}<span class="chat-time">${when}</span>`;
+      )}<span class="chat-time">${when}</span>${deleteBtn}`;
       chatMessagesEl.appendChild(div);
     });
   chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
@@ -239,6 +252,17 @@ chatForm.addEventListener("submit", async (e) => {
   const { error } = await db.from("chat_messages").insert({ author: currentUser, content });
   if (error) alert("メッセージの送信に失敗しました: " + error.message);
 });
+
+if (isAdmin) {
+  chatMessagesEl.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".chat-delete-btn");
+    if (!btn) return;
+    const ok = await showConfirm("このチャットメッセージを削除しますか？（管理者操作）");
+    if (!ok) return;
+    const { error } = await db.from("chat_messages").delete().eq("id", btn.dataset.id);
+    if (error) alert("削除に失敗しました: " + error.message);
+  });
+}
 
 // ============================================================
 // 1. タスク管理エリア
