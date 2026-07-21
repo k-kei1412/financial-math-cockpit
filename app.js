@@ -374,6 +374,27 @@ async function loadChatMessages() {
   renderChatMessages(data);
 }
 
+// チャットは最新50件程度に保つ。上限を超えた分は古いものから論理削除する
+// （ゴミ箱から復元は可能）。新規投稿のたびに呼び出せば十分で、
+// DBスキーマの変更は不要（anonキーの既存RLSの範囲内で完結する）。
+const CHAT_MESSAGE_LIMIT = 50;
+
+async function trimChatMessages() {
+  const { data, error } = await db
+    .from("chat_messages")
+    .select("id")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .range(CHAT_MESSAGE_LIMIT, CHAT_MESSAGE_LIMIT + 200);
+  if (error || !data || data.length === 0) return;
+  const overflowIds = data.map((row) => row.id);
+  const { error: trimError } = await db
+    .from("chat_messages")
+    .update({ deleted_at: new Date().toISOString() })
+    .in("id", overflowIds);
+  if (trimError) console.error(trimError);
+}
+
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const content = chatInput.value.trim();
@@ -381,6 +402,7 @@ chatForm.addEventListener("submit", async (e) => {
   chatInput.value = "";
   const { error } = await db.from("chat_messages").insert({ author: currentUser, content });
   if (error) alert("メッセージの送信に失敗しました: " + error.message);
+  else trimChatMessages();
 });
 
 chatMessagesEl.addEventListener("click", async (e) => {
@@ -420,12 +442,10 @@ function renderTasks(tasks) {
       const deleteCell = isAdmin
         ? `<td><button class="icon-btn task-delete-btn" data-id="${task.id}" title="削除（管理者）">✕</button></td>`
         : "<td></td>";
-      const titleCell = isAdmin
-        ? `<input type="text" class="task-edit-input" data-id="${task.id}" data-field="title" value="${escapeAttr(task.title)}" />`
-        : escapeHtml(task.title);
-      const assigneeCell = isAdmin
-        ? `<input type="text" class="task-edit-input" data-id="${task.id}" data-field="assignee" value="${escapeAttr(task.assignee || "")}" />`
-        : escapeHtml(displayName(task.assignee) || "未定");
+      // タスク名・担当者は全員がその場で直接編集できる（削除は管理者のみ）。
+      // 担当者欄は表示名に変換してから値を埋める（管理者の名札文字列をそのまま出さないため）。
+      const titleCell = `<input type="text" class="task-edit-input" data-id="${task.id}" data-field="title" value="${escapeAttr(task.title)}" />`;
+      const assigneeCell = `<input type="text" class="task-edit-input" data-id="${task.id}" data-field="assignee" value="${escapeAttr(displayName(task.assignee || ""))}" placeholder="未定" />`;
       tr.innerHTML = `
         <td>${titleCell}</td>
         <td>${assigneeCell}</td>
@@ -961,4 +981,5 @@ async function init() {
   await Promise.all([loadChatMessages(), loadTasks(), loadFormulas(), loadDraft(), loadLogHistory()]);
   subscribeRealtime();
   joinPresence(currentUser);
+  trimChatMessages(); // 既に50件を超えて溜まっている分があれば起動時にも掃除する
 }
