@@ -107,7 +107,10 @@
       <div class="editor-half">
         <div class="editor-toolbar">
           <span class="meta" id="draft-meta">最終更新: -</span>
-          <button id="save-log-btn" class="primary-btn">ログとして保存</button>
+          <div class="editor-toolbar-actions">
+            <button id="clear-log-btn" type="button" class="secondary-btn" title="入力欄を空にする">クリア</button>
+            <button id="save-log-btn" class="primary-btn">ログとして保存</button>
+          </div>
         </div>
         <textarea id="log-input" placeholder="ここに作業ログや数式（$...$ / $$...$$）を入力..."></textarea>
       </div>

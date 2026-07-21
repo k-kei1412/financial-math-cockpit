@@ -830,6 +830,7 @@ formulaList.addEventListener("submit", async (e) => {
 const logInput = document.getElementById("log-input");
 const previewPane = document.getElementById("preview-pane");
 const saveLogBtn = document.getElementById("save-log-btn");
+const clearLogBtn = document.getElementById("clear-log-btn");
 const logHistoryList = document.getElementById("log-history-list");
 const draftMeta = document.getElementById("draft-meta");
 
@@ -853,6 +854,15 @@ logInput.addEventListener("input", () => {
   renderPreview();
   clearTimeout(draftDebounceTimer);
   draftDebounceTimer = setTimeout(pushDraftToServer, 600);
+});
+
+// 1文字ずつバックスペースで消さなくて済むよう、入力欄をワンクリックで空にする
+clearLogBtn.addEventListener("click", () => {
+  if (!logInput.value) return;
+  logInput.value = "";
+  renderPreview();
+  clearTimeout(draftDebounceTimer);
+  pushDraftToServer(); // 共有下書きなので即座に空の状態を全員に反映する
 });
 
 async function pushDraftToServer() {
