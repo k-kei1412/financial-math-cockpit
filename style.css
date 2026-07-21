@@ -358,9 +358,27 @@ main#main-split {
   min-width: 280px;
 }
 
-#formula-search {
-  width: 100%;
+.formula-search-row {
+  display: flex;
+  gap: 6px;
   margin-bottom: 8px;
+}
+
+#formula-search {
+  flex: 1;
+  min-width: 0;
+}
+
+#formula-category-filter {
+  flex-shrink: 0;
+  max-width: 40%;
+  font-family: inherit;
+  background: var(--panel-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
 }
 
 .copy-mode-toggle {
@@ -376,6 +394,60 @@ main#main-split {
   flex: 1;
   overflow-y: auto;
 }
+
+.category-group {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.category-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel);
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.category-toggle:hover { background: rgba(255, 255, 255, 0.03); }
+
+.category-group .chevron {
+  font-size: 10px;
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.category-group.open .chevron { transform: rotate(90deg); }
+
+.category-toggle .cat-name {
+  flex: 1;
+  font-size: 13px;
+}
+
+.category-toggle .cat-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+  background: #101728;
+  padding: 1px 7px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.category-body {
+  padding: 6px;
+  background: var(--bg);
+}
+.category-body[hidden] { display: none; }
+
+.category-body .formula-card:last-child { margin-bottom: 0; }
 
 .formula-card {
   background: var(--panel-alt);

@@ -88,7 +88,12 @@
       </form>
     </details>
 
-    <input type="text" id="formula-search" placeholder="公式名・数式・カテゴリで検索..." />
+    <div class="formula-search-row">
+      <input type="text" id="formula-search" placeholder="公式名・数式・カテゴリで検索..." />
+      <select id="formula-category-filter" title="カテゴリで絞り込み">
+        <option value="">カテゴリ: すべて</option>
+      </select>
+    </div>
     <label class="copy-mode-toggle">
       <input type="checkbox" id="copy-mode-sheet" />
       スプレッドシート貼り付けモード（先頭に ' を付与）

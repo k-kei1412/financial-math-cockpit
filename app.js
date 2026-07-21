@@ -508,6 +508,7 @@ taskTableBody.addEventListener("click", async (e) => {
 // ============================================================
 const formulaList = document.getElementById("formula-list");
 const formulaSearch = document.getElementById("formula-search");
+const formulaCategoryFilter = document.getElementById("formula-category-filter");
 const formulaForm = document.getElementById("formula-form");
 const formulaNameInput = document.getElementById("formula-name");
 const formulaDuplicateWarning = document.getElementById("formula-duplicate-warning");
@@ -515,6 +516,9 @@ const copyModeCheckbox = document.getElementById("copy-mode-sheet");
 
 let allFormulas = [];
 const expandedFormulaIds = new Set();
+// カテゴリ見出しの開閉状態。公式が増えても一覧が縦に伸び続けないよう、
+// 既定では各カテゴリを畳んでおき、検索・絞り込み中のみ自動で開く。
+const expandedCategories = new Set();
 let editingFormulaId = null;
 
 // $ / $$ で囲まれた部分を剥がし、純粋なLaTeXコードのみを取り出す
@@ -528,66 +532,107 @@ function stripDelimiters(raw) {
   return s.trim();
 }
 
-function renderFormulas(list) {
-  formulaList.innerHTML = "";
-  if (list.length === 0) {
-    formulaList.innerHTML = '<p style="color:#94a0bd;font-size:13px;">該当する公式が見つかりません。</p>';
-    return;
-  }
-  list.forEach((f) => {
-    const isOpen = expandedFormulaIds.has(f.id);
-    const card = document.createElement("div");
-    card.className = "formula-card" + (isOpen ? " open" : "");
+// 1件分の公式カード（表示 or 管理者編集フォーム）のDOM要素を組み立てる
+function buildFormulaCard(f) {
+  const isOpen = expandedFormulaIds.has(f.id);
+  const card = document.createElement("div");
+  card.className = "formula-card" + (isOpen ? " open" : "");
 
-    if (isAdmin && editingFormulaId === f.id) {
-      card.innerHTML = `
-        <button type="button" class="formula-card-toggle" data-id="${f.id}">
-          <span class="chevron">▶</span>
-          <span class="name">${escapeHtml(f.name)}</span>
-          <span class="category">${escapeHtml(f.category || "未分類")}</span>
-        </button>
-        <div class="formula-card-body">
-          <form class="formula-edit-form" data-id="${f.id}">
-            <input type="text" class="formula-edit-name" value="${escapeAttr(f.name)}" required />
-            <textarea class="formula-edit-latex" rows="2" required>${escapeHtml(f.latex)}</textarea>
-            <input type="text" class="formula-edit-category" value="${escapeAttr(f.category || "")}" />
-            <div class="formula-actions">
-              <button type="submit" class="primary-btn">保存</button>
-              <button type="button" class="secondary-btn formula-edit-cancel">キャンセル</button>
-            </div>
-          </form>
-        </div>
-      `;
-      formulaList.appendChild(card);
-      return;
-    }
-
-    const adminButtons = isAdmin
-      ? `<button class="secondary-btn formula-edit-btn" data-id="${f.id}">編集</button>
-         <button class="secondary-btn formula-delete-btn" data-id="${f.id}">削除</button>`
-      : "";
+  if (isAdmin && editingFormulaId === f.id) {
     card.innerHTML = `
       <button type="button" class="formula-card-toggle" data-id="${f.id}">
         <span class="chevron">▶</span>
         <span class="name">${escapeHtml(f.name)}</span>
         <span class="category">${escapeHtml(f.category || "未分類")}</span>
       </button>
-      <div class="formula-card-body" ${isOpen ? "" : "hidden"}>
-        <div class="formula-preview"><span class="katex-target"></span></div>
-        <div class="formula-actions">
-          <button class="copy-btn" data-latex="${escapeAttr(f.latex)}">コピー</button>
-          ${adminButtons}
-        </div>
+      <div class="formula-card-body">
+        <form class="formula-edit-form" data-id="${f.id}">
+          <input type="text" class="formula-edit-name" value="${escapeAttr(f.name)}" required />
+          <textarea class="formula-edit-latex" rows="2" required>${escapeHtml(f.latex)}</textarea>
+          <input type="text" class="formula-edit-category" value="${escapeAttr(f.category || "")}" />
+          <div class="formula-actions">
+            <button type="submit" class="primary-btn">保存</button>
+            <button type="button" class="secondary-btn formula-edit-cancel">キャンセル</button>
+          </div>
+        </form>
       </div>
     `;
-    const target = card.querySelector(".katex-target");
-    try {
-      katex.render(f.latex, target, { throwOnError: false, displayMode: true });
-    } catch (err) {
-      target.textContent = f.latex;
-    }
-    formulaList.appendChild(card);
+    return card;
+  }
+
+  const adminButtons = isAdmin
+    ? `<button class="secondary-btn formula-edit-btn" data-id="${f.id}">編集</button>
+       <button class="secondary-btn formula-delete-btn" data-id="${f.id}">削除</button>`
+    : "";
+  card.innerHTML = `
+    <button type="button" class="formula-card-toggle" data-id="${f.id}">
+      <span class="chevron">▶</span>
+      <span class="name">${escapeHtml(f.name)}</span>
+      <span class="category">${escapeHtml(f.category || "未分類")}</span>
+    </button>
+    <div class="formula-card-body" ${isOpen ? "" : "hidden"}>
+      <div class="formula-preview"><span class="katex-target"></span></div>
+      <div class="formula-actions">
+        <button class="copy-btn" data-latex="${escapeAttr(f.latex)}">コピー</button>
+        ${adminButtons}
+      </div>
+    </div>
+  `;
+  const target = card.querySelector(".katex-target");
+  try {
+    katex.render(f.latex, target, { throwOnError: false, displayMode: true });
+  } catch (err) {
+    target.textContent = f.latex;
+  }
+  return card;
+}
+
+// カテゴリごとに折りたたみ可能な見出しでグループ化して表示する。
+// forceOpen が true の場合（検索・カテゴリ絞り込み中）は全グループを強制的に開く。
+function renderFormulas(list, forceOpen) {
+  formulaList.innerHTML = "";
+  if (list.length === 0) {
+    formulaList.innerHTML = '<p style="color:#94a0bd;font-size:13px;">該当する公式が見つかりません。</p>';
+    return;
+  }
+
+  const groups = new Map();
+  list.forEach((f) => {
+    const cat = f.category || "未分類";
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat).push(f);
   });
+  const categoryNames = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b, "ja"));
+
+  categoryNames.forEach((cat) => {
+    const items = groups.get(cat);
+    const isOpen = forceOpen || expandedCategories.has(cat);
+    const groupEl = document.createElement("div");
+    groupEl.className = "category-group" + (isOpen ? " open" : "");
+    groupEl.innerHTML = `
+      <button type="button" class="category-toggle" data-category="${escapeAttr(cat)}">
+        <span class="chevron">▶</span>
+        <span class="cat-name">${escapeHtml(cat)}</span>
+        <span class="cat-count">${items.length}</span>
+      </button>
+      <div class="category-body" ${isOpen ? "" : "hidden"}></div>
+    `;
+    const body = groupEl.querySelector(".category-body");
+    items.forEach((f) => body.appendChild(buildFormulaCard(f)));
+    formulaList.appendChild(groupEl);
+  });
+}
+
+// 検索/カテゴリ絞り込みのプルダウンを、現在登録されているカテゴリ一覧で更新する
+function populateCategoryFilterOptions() {
+  const categories = Array.from(new Set(allFormulas.map((f) => f.category || "未分類"))).sort((a, b) =>
+    a.localeCompare(b, "ja")
+  );
+  const current = formulaCategoryFilter.value;
+  formulaCategoryFilter.innerHTML =
+    '<option value="">カテゴリ: すべて</option>' +
+    categories.map((c) => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join("");
+  if (categories.includes(current)) formulaCategoryFilter.value = current;
 }
 
 async function loadFormulas() {
@@ -598,23 +643,36 @@ async function loadFormulas() {
     .order("created_at", { ascending: true });
   if (error) return console.error(error);
   allFormulas = data;
+  populateCategoryFilterOptions();
   applyFormulaFilter();
 }
 
 function applyFormulaFilter() {
   const q = formulaSearch.value.trim().toLowerCase();
-  const filtered = !q
-    ? allFormulas
-    : allFormulas.filter(
-        (f) =>
-          f.name.toLowerCase().includes(q) ||
-          f.latex.toLowerCase().includes(q) ||
-          (f.category || "").toLowerCase().includes(q)
-      );
-  renderFormulas(filtered);
+  const selectedCategory = formulaCategoryFilter.value;
+  let filtered = allFormulas;
+  if (selectedCategory) {
+    filtered = filtered.filter((f) => (f.category || "未分類") === selectedCategory);
+  }
+  if (q) {
+    filtered = filtered.filter(
+      (f) =>
+        f.name.toLowerCase().includes(q) ||
+        f.latex.toLowerCase().includes(q) ||
+        (f.category || "").toLowerCase().includes(q)
+    );
+  }
+  // 編集中の公式は、そのカテゴリが畳まれていても見失わないように開いておく
+  if (editingFormulaId) {
+    const editing = allFormulas.find((f) => f.id === editingFormulaId);
+    if (editing) expandedCategories.add(editing.category || "未分類");
+  }
+  const forceOpen = Boolean(q) || Boolean(selectedCategory);
+  renderFormulas(filtered, forceOpen);
 }
 
 formulaSearch.addEventListener("input", applyFormulaFilter);
+formulaCategoryFilter.addEventListener("change", applyFormulaFilter);
 
 // 登録名が既存の公式名と重複・類似していないかその場でチェックする
 function findDuplicateFormulas(name) {
@@ -652,6 +710,22 @@ formulaForm.addEventListener("submit", async (e) => {
 });
 
 formulaList.addEventListener("click", async (e) => {
+  const catToggleBtn = e.target.closest(".category-toggle");
+  if (catToggleBtn) {
+    const cat = catToggleBtn.dataset.category;
+    const group = catToggleBtn.closest(".category-group");
+    const body = group.querySelector(".category-body");
+    const nowOpen = body.hasAttribute("hidden");
+    body.toggleAttribute("hidden", !nowOpen);
+    group.classList.toggle("open", nowOpen);
+    if (nowOpen) {
+      expandedCategories.add(cat);
+    } else {
+      expandedCategories.delete(cat);
+    }
+    return;
+  }
+
   const toggleBtn = e.target.closest(".formula-card-toggle");
   if (toggleBtn) {
     const id = toggleBtn.dataset.id;
